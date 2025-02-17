@@ -36,10 +36,10 @@ def get_ladder(result):
         return ladder[result]
 
 fate_options = { 
-        -1 : '[-]', 
-        0  : '[  ]', 
-        1  : '[+]' 
-    }
+    -1 : '[-]', 
+    0  : '[  ]', 
+    1  : '[+]' 
+}
 
 async def rf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.debug(context.args)
@@ -77,7 +77,7 @@ async def process(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             for item in pair:
                 logging.debug(f"item: {item}")
                 if item and len(item) > 1 and any(d in item for d in ['d', 'D']):
-                    dice = re.search(r'(\d*)d([0-9f]+)([!hl])?', item.lower())
+                    dice = re.search(r'(\d*)d([0-9f]+)([!hl])?(\d+)?', item.lower())
                     dice_num = int(dice.group(1)) if dice.group(1) else 1
                     original_dice_num = dice_num
                     if dice_num > 1000:
@@ -91,14 +91,20 @@ async def process(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     current_visual_results = ''
                     plus = ''
                     explode = False
+
                     highest = False
                     lowest = False
-                    if dice.group(3) and dice.group(3)[0] == '!' and int(dice.group(2)) > 1:
-                        explode = True 
-                    elif dice.group(3) and dice.group(3)[0] in ['h','H']:
-                        highest = True
-                    elif dice.group(3) and dice.group(3)[0] in ['l','L']:
-                        lowest = True
+                    rolls = []
+                    keep_count = 1
+                    if dice.group(3):
+                        if dice.group(3)[0] == '!' and int(dice.group(2)) > 1:
+                            explode = True 
+                        elif dice.group(3)[0] in ['h','H']:
+                            highest = True
+                        elif dice.group(3)[0] in ['l','L']:
+                            lowest = True
+                    if (highest or lowest) and dice.group(4):
+                        keep_count = int(dice.group(4))
 
                     random_start_num = 1
                     if sides in ['f','F']:
@@ -116,17 +122,8 @@ async def process(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         if is_fate:
                             visual_last_roll = fate_options[last_roll] + ' '
                         current_visual_results +=  visual_last_roll
-
-                        if (highest or lowest) and current_die_results:
-                            #print(current_die_results)
-                            if highest:
-                                if last_roll > int(current_die_results):
-                                    current_die_results = str(last_roll)
-                            else: #lowest
-                                if last_roll < int(current_die_results):
-                                    current_die_results = str(last_roll)
-                        else:
-                            current_die_results += plus + str(last_roll)
+                        current_die_results += plus + str(last_roll)
+                        rolls.append(last_roll)
 
                         if not (explode and last_roll == sides):
                             dice_num -= 1
@@ -141,11 +138,26 @@ async def process(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     if is_fate:
                         is_fate = False
                     result['visual'].append(current_visual_results)
-                    result['equation'].append(current_die_results)
                     result['visual'].append(')')
-                    result['equation'].append(')')
+
                     if highest or lowest:
                         result['visual'].append(dice.group(3)[0])
+                        result['visual'].append(str(keep_count))
+
+                        logging.info(str(rolls))
+                        if highest:
+                            selected = sorted(rolls, reverse=True)[:keep_count]
+                        elif lowest:
+                            selected = sorted(rolls)[:keep_count]
+                        logging.info(str(selected))
+                        selected_results = ''
+                        for roll in selected:
+                            selected_results += plus + str(roll)
+                        result['equation'].append(selected_results)
+                    else:
+                        result['equation'].append(current_die_results)
+
+                    result['equation'].append(')')
                 else:
                     if item and (item in ['+','-','/','*',')','('] or int(item)):
                         result['visual'].append(' ')
